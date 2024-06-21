@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  simplestorage-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: simplestorage-frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./public:/app/public
+    environment:
+      - TZ=UTC  # Optionally set timezone or other environment variables
+    restart: unless-stopped
