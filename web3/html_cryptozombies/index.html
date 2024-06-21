@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CryptoZombies Front-end</title>
+  <script language="javascript" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <script language="javascript" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/web3/1.5.2/web3.min.js"></script>
+</head>
+<body>
+  <div>
+    <h2>Create a New Zombie</h2>
+    <input type="text" id="zombieName" placeholder="Zombie Name">
+    <button id="createZombieButton">Create Zombie</button>
+  </div>
+
+  <div>
+    <h2>Your Zombies</h2>
+    <div id="zombies"></div>
+  </div>
+
+  <div id="txStatus"></div>
+
+  <script>
+    var cryptoZombies;
+    var userAccount;
+
+    async function startApp() {
+      const cryptoZombiesAddress = "0x08dF2307452C9333c211B828B2f5b680BDFBd441";
+      
+      try {
+        console.log("Fetching ABI...");
+        const response = await fetch('./ZombieOwnership.json');
+        const contractData = await response.json();
+        const cryptoZombiesABI = contractData.abi;
+        console.log("ABI fetched:", cryptoZombiesABI);
+
+        // Ensure web3 is initialized
+        if (!window.web3) {
+          throw new Error('Web3 is not initialized.');
+        }
+
+
+        console.log("Contract ABI:", cryptoZombiesABI);
+        console.log("Contract Addressss:", cryptoZombiesAddress);
+
+        // Verify connection
+        const networkId = await web3.eth.net.getId();
+        console.log("Network ID:", networkId);
+        const accounts = await web3.eth.getAccounts();
+        console.log("Accounts:", accounts);
+
+        web3.eth.getBalance(accounts[0]).then(function(balance) {
+        console.log("Balance of userAccount:", balance);
+        });
+
+        cryptoZombies = new web3.eth.Contract(cryptoZombiesABI, cryptoZombiesAddress);
+        console.log("Contract instance created", cryptoZombies);
+
+        var accountInterval = setInterval(async function() {
+          const accounts = await web3.eth.getAccounts();
+          console.log("Accounts fetched:", accounts);
+          if (accounts[0] !== userAccount) {
+            userAccount = accounts[0];
+            console.log("User account changed:", userAccount);
+            getZombiesByOwner(userAccount).then(displayZombies);
+          }
+        }, 1000);
+
+        cryptoZombies.events.Transfer({ filter: { _to: userAccount } })
+          .on("data", function(event) {
+            let data = event.returnValues;
+            console.log("Transfer event received:", data);
+            getZombiesByOwner(userAccount).then(displayZombies);
+          })
+          .on("error", function(error) {
+            console.error("Error in Transfer event:", error);
+          });
+
+      } catch (error) {
+        console.error("Error fetching ABI or initializing contract", error);
+      }
+    }
+
+    function displayZombies(ids) {
+      console.log("Displaying zombies:", ids);
+      $("#zombies").empty();
+      for (const id of ids) {
+        getZombieDetails(id).then(function(zombie) {
+          console.log("Zombie details fetched:", zombie);
+          $("#zombies").append(`<div class="zombie">
+            <ul>
+              <li>Name: ${zombie.name}</li>
+              <li>DNA: ${zombie.dna}</li>
+              <li>Level: ${zombie.level}</li>
+              <li>Wins: ${zombie.winCount}</li>
+              <li>Losses: ${zombie.lossCount}</li>
+              <li>Ready Time: ${zombie.readyTime}</li>
+            </ul>
+          </div>`);
+        }).catch(function(error) {
+          console.error("Error fetching zombie details:", error);
+        });
+      }
+    }
+
+    async function createRandomZombie(name) {
+      console.log("Creating random zombie with name:", name);
+      $("#txStatus").text("Creating new zombie on the blockchain. This may take a while...");
+      const gasEstimate = await cryptoZombies.methods.createRandomZombie(name).estimateGas({ from: userAccount });
+      console.log("Gas estimate for createRandomZombie:", gasEstimate);
+
+
+      return cryptoZombies.methods.createRandomZombie(name)
+        .send({ from: userAccount })
+        .on("receipt", function(receipt) {
+          console.log("Zombie created successfully:", receipt);
+          $("#txStatus").text("Successfully created " + name + "!");
+          getZombiesByOwner(userAccount).then(displayZombies);
+        })
+        .on("error", function(error) {
+          console.error("Error creating zombie:", error);
+          $("#txStatus").text(error);
+        });
+    }
+
+    function getZombieDetails(id) {
+      console.log("Fetching zombie details for ID:", id);
+      return cryptoZombies.methods.zombies(id).call();
+    }
+
+    function getZombiesByOwner(owner) {
+      console.log("Fetching zombies for owner:", owner);
+      return cryptoZombies.methods.getZombiesByOwner(owner).call();
+    }
+
+    window.addEventListener('load', async function() {
+      console.log("Window loaded");
+      if (window.ethereum) {
+        web3 = new Web3(window.ethereum);
+        try {
+          console.log("Requesting account access...");
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+          console.log("Account access granted", web3);
+          startApp();
+        } catch (error) {
+          console.error("User denied account access or error occurred", error);
+        }
+      } else if (window.web3) {
+        web3 = new Web3(window.web3.currentProvider);
+        console.log("MetaMask found", web3);
+        startApp();
+      } else {
+        alert("MetaMask not installed");
+      }
+    });
+
+    document.getElementById('createZombieButton').addEventListener('click', function() {
+      const zombieName = document.getElementById('zombieName').value;
+      console.log("Create Zombie button clicked with name:", zombieName);
+      createRandomZombie(zombieName);
+    });
+  </script>
+</body>
+</html>

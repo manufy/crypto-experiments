@@ -1,0 +1,6 @@
+nvm install --lts
+nvm use --lts
+node --version
+npm --version
+npm i -g truffle
+npm i -g ganache
